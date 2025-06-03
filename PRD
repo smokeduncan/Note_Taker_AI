@@ -1,250 +1,1408 @@
-This document is a synthesis of our detailed discussions and should be thoroughly reviewed and validated by your team.
+# AI-Powered Sales & Productivity Assistant
+## Development Task Breakdown & Implementation Roadmap with MCP + AG-UI Integration
 
-Product Requirements Document: AI-Powered Sales & Productivity Assistant with AI Agents
+### 🎯 **Project Overview**
+Building an AI-powered sales assistant that leverages **MCP (Model Context Protocol)** for backend data integration and **AG-UI (Agent-User Interaction Protocol)** for frontend agent interactions. This creates a standardized, interoperable system that enhances productivity through intelligent note processing, automated communications, task management, and activity tracking.
 
-Version: 1.0 (Synthesized Draft)
-Date: June 1st, 2025
-Status: Draft
+### 🔗 **Protocol Integration Strategy**
+- **MCP**: Backend data sources (CRM, documents, calendar) → AI Agent
+- **AG-UI**: AI Agent → Frontend application (real-time streaming UI)
+- **Combined**: Complete agent-in-the-loop workflow with standardized protocols
 
-1. Introduction
-(This section would typically include the product vision, goals, target audience, and scope. We haven't detailed this, so consider this a placeholder for your team to complete.)
+### **SAP Sales Cloud V2 MCP Server Implementation**
 
-1.1. Purpose: To define the requirements for an AI-Powered Sales & Productivity Assistant designed to integrate with various CRM systems and other enterprise tools, enhancing user productivity through intelligent note processing, automated communication drafting, task management, and insightful activity tracking.
-1.2. Goals: (e.g., Increase sales team efficiency, improve data quality in CRM, reduce time spent on administrative tasks, provide actionable insights.)
-1.3. Target Audience: (e.g., Sales representatives, account managers, customer success teams, and other professionals interacting with CRM systems.)
-1.4. Scope: (Define what is in and out of scope for the initial release/version this PRD covers.)
-2. Assumptions & Dependencies
-(This section would list any assumptions made while defining requirements and any external dependencies. We haven't detailed this.)
+#### **SAP Sales Cloud Technical Architecture**
+SAP Sales Cloud Version 2 is API-driven built using microservices, where every business object has its own REST API. Key features:
 
-3. User Personas & User Stories
-(This section would detail the target user personas and their key user stories. We've implicitly addressed many user needs but haven't formally documented personas/stories.)
+- **Business Objects Available**: Opportunity, Account, Contact, Lead, Activity, Task, Appointment
+- **Authentication Methods**: Basic Authentication and Certificate-based Authentication for API users
+- **API Access**: Available through SAP Business Accelerator Hub with dedicated business users or API users
+- **Response Type**: Synchronous API calls with success/failure responses
 
-4. Design & UX Guidelines
-(This section would cover high-level design principles, branding, accessibility requirements, etc. We haven't detailed this.)
+#### **SAP Sales Cloud MCP Server Structure**
+```python
+# SAP Sales Cloud MCP Server Implementation
+from modelcontextprotocol.server import MCPServer
+import requests
+import base64
 
-5. Functional Requirements
+class SAPSalesCloudMCPServer(MCPServer):
+    def __init__(self, tenant_url: str, username: str, password: str):
+        super().__init__("sap_sales_cloud")
+        self.base_url = f"https://{tenant_url}/api/v2"
+        self.auth_header = self._create_auth_header(username, password)
+        
+    def _create_auth_header(self, username: str, password: str):
+        credentials = base64.b64encode(f"{username}:{password}".encode()).decode()
+        return {"Authorization": f"Basic {credentials}"}
+    
+    async def list_tools(self):
+        return [
+            # Opportunity Management
+            {"name": "search_opportunities", "description": "Search SAP opportunities"},
+            {"name": "create_opportunity", "description": "Create new opportunity"},
+            {"name": "update_opportunity", "description": "Update opportunity details"},
+            
+            # Account Management  
+            {"name": "search_accounts", "description": "Search SAP accounts"},
+            {"name": "create_account", "description": "Create new account"},
+            {"name": "get_account_hierarchy", "description": "Get account relationships"},
+            
+            # Contact Management
+            {"name": "search_contacts", "description": "Search SAP contacts"},
+            {"name": "create_contact", "description": "Create new contact"},
+            {"name": "update_contact", "description": "Update contact information"},
+            
+            # Activity Management
+            {"name": "search_activities", "description": "Search activities and tasks"},
+            {"name": "create_activity", "description": "Create new activity"},
+            {"name": "schedule_appointment", "description": "Schedule appointments"},
+            
+            # Lead Management
+            {"name": "search_leads", "description": "Search and qualify leads"},
+            {"name": "convert_lead", "description": "Convert lead to opportunity"},
+            
+            # Reporting & Analytics
+            {"name": "get_opportunity_pipeline", "description": "Get pipeline analytics"},
+            {"name": "get_sales_forecast", "description": "Get sales forecasting data"},
+        ]
+    
+    async def call_tool(self, name: str, arguments: dict):
+        try:
+            if name == "search_opportunities":
+                return await self._search_opportunities(arguments)
+            elif name == "create_opportunity":
+                return await self._create_opportunity(arguments)
+            elif name == "search_accounts":
+                return await self._search_accounts(arguments)
+            # ... implement other methods
+            
+        except Exception as e:
+            return {"error": f"SAP Sales Cloud API error: {str(e)}"}
+    
+    async def _search_opportunities(self, params: dict):
+        # SAP Sales Cloud V2 Opportunity API endpoint
+        endpoint = f"{self.base_url}/opportunities"
+        
+        # Build query parameters for SAP API
+        query_params = {
+            "$filter": self._build_odata_filter(params.get("filters", {})),
+            "$select": "OpportunityID,Description,SalesOrganization,ExpectedRevenueAmount",
+            "$top": params.get("limit", 50)
+        }
+        
+        response = requests.get(
+            endpoint, 
+            headers=self.auth_header,
+            params=query_params
+        )
+        response.raise_for_status()
+        
+        return {
+            "opportunities": response.json().get("value", []),
+            "count": len(response.json().get("value", []))
+        }
+    
+    async def _create_opportunity(self, opportunity_data: dict):
+        endpoint = f"{self.base_url}/opportunities"
+        
+        # Map to SAP Sales Cloud V2 opportunity structure
+        sap_opportunity = {
+            "Description": opportunity_data.get("name"),
+            "SalesOrganization": opportunity_data.get("sales_org"),
+            "ExpectedRevenueAmount": opportunity_data.get("amount"),
+            "ExpectedClosingDate": opportunity_data.get("close_date"),
+            "ProcessingType": "01",  # Standard opportunity type
+            "LifeCycleStatus": "01"  # Open status
+        }
+        
+        response = requests.post(
+            endpoint,
+            headers={**self.auth_header, "Content-Type": "application/json"},
+            json=sap_opportunity
+        )
+        response.raise_for_status()
+        
+        return {
+            "opportunity_id": response.json().get("OpportunityID"),
+            "status": "created",
+            "sap_data": response.json()
+        }
+    
+    def _build_odata_filter(self, filters: dict) -> str:
+        """Build OData $filter query for SAP APIs"""
+        filter_parts = []
+        
+        if filters.get("account_name"):
+            filter_parts.append(f"contains(AccountName,'{filters['account_name']}')")
+        if filters.get("stage"):
+            filter_parts.append(f"ProcessingType eq '{filters['stage']}'")
+        if filters.get("amount_min"):
+            filter_parts.append(f"ExpectedRevenueAmount ge {filters['amount_min']}")
+            
+        return " and ".join(filter_parts)
 
-5.1. Intelligent Note Processing
+    async def list_resources(self):
+        return [
+            {
+                "uri": "sap://opportunities",
+                "name": "SAP Opportunities",
+                "description": "Access to SAP Sales Cloud opportunities"
+            },
+            {
+                "uri": "sap://accounts", 
+                "name": "SAP Accounts",
+                "description": "Access to SAP Sales Cloud accounts"
+            },
+            {
+                "uri": "sap://contacts",
+                "name": "SAP Contacts", 
+                "description": "Access to SAP Sales Cloud contacts"
+            }
+        ]
+```
 
-5.1.1. Note Input & Capture (Step 1)
+#### **SAP Sales Cloud Integration Features**
 
-5.1.1.1. Multi-Modal Input:
-5.1.1.1.1. Voice Input: Real-time voice transcription, pause/resume, background recording (with permissions/indicators), language detection, (Advanced) speaker diarization.
-5.1.1.1.2. Text Input: Rich text editor, copy/paste, markdown support.
-5.1.1.1.3. File Upload: Audio files (mp3, wav, m4a), text documents (txt, docx, md), (Potentially) PDF for text extraction.
-5.1.1.1.4. Email Forwarding/Integration: Forward emails to create notes.
-5.1.1.2. Contextual Association at Capture:
-5.1.1.2.1. Link to Connected CRM System Entities: Associate notes with CRM records (Account, Contact, Opportunity, Case); suggest entities based on context.
-5.1.1.2.2. Tags & Categories: Manual addition for organization.
-5.1.1.3. Basic Note Metadata:
-5.1.1.3.1. Automatic Metadata: Timestamps, input source, user ID.
-5.1.1.3.2. Manual Metadata: User-added title/subject.
-5.1.1.4. Draft Mode & Saving:
-5.1.1.4.1. Auto-save: Prevent data loss.
-5.1.1.4.2. Manual Save: Explicit user control.
-5.1.1.4.3. Offline Capability: Capture notes offline, sync when connected.
-5.1.2. Initial Note Processing & Enhancement (Step 2)
+**Business Objects Supported:**
+- **Opportunities**: Full lifecycle management, pipeline tracking
+- **Accounts**: Company information, hierarchies, relationships  
+- **Contacts**: Contact management with role assignments
+- **Leads**: Lead qualification and conversion workflows
+- **Activities**: Meeting scheduling, task management, follow-ups
+- **Products**: Product catalog integration for opportunity line items
+- **Territories**: Sales territory and quota management
 
-5.1.2.1. Transcription Refinement (Voice Inputs): Automatic punctuation & capitalization, number & date normalization, optional filler word management, optional profanity filtering.
-5.1.2.2. Text Normalization & Correction (All Text): Spelling correction (user accept/reject), grammar correction (suggestions/corrections), acronym & jargon handling (custom dictionary, potential expansion), whitespace & formatting consistency.
-5.1.2.3. Structural Enhancement: Paragraph segmentation, list detection & formatting, (Advanced) section & topic detection.
-5.1.2.4. Language & Dialect Support: Language verification, dialect adaptability.
-5.1.2.5. Pre-Transcription Audio Enhancement (Uploaded Audio): Noise reduction, audio normalization.
-5.1.2.6. User Review & Feedback Loop: Editable processed text, feedback mechanism for errors (for model improvement).
-5.1.3. Core Information Extraction (Step 3)
+**Advanced SAP Integration Capabilities:**
+- **Real-time Data Sync**: Bidirectional synchronization with conflict resolution
+- **SAP Business Rules**: Integration with SAP's business logic and validations
+- **Custom Fields**: Support for customer-specific field extensions
+- **Workflow Integration**: Connection to SAP's approval and escalation workflows
+- **Multi-Language**: Support for SAP's globalization features
+- **Currency Handling**: Multi-currency support for international sales
 
-5.1.3.1. Action Item Identification & Detailing: Automated detection, task description extraction, assignee suggestion (contextual, link to CRM contacts), due date suggestion (relative to absolute), optional action item categorization/prioritization, confidence scoring, contextual linking to source in note, user confirmation & editing.
-5.1.3.2. Key Decision Logging: Automated detection, decision context capture, decision maker identification (if possible), confidence scoring & user validation.
-5.1.3.3. Named Entity Recognition (NER) & Linking: Standard entity extraction (Persons, Orgs, Locations, Dates, Products, Monetary values), custom entity extraction (configurable), CRM entity linking (link to records in connected CRM).
-5.1.3.4. Key Topic & Keyword Extraction: Topic identification, keyword/keyphrase extraction.
-5.1.3.5. Question & Issue Detection: Question identification, problem/issue/risk detection.
-5.1.3.6. (Advanced) Sentiment & Intent Analysis: Sentiment indication, intent recognition (e.g., intent to buy, escalate).
-5.1.3.7. Comprehensive User Review Interface for Extracted Information: Unified view alongside original note, easy modification (add, delete, edit), feedback loop integration.
-5.1.4. Summarization & Synthesis (Step 4)
+#### **SAP Authentication Configuration**
+```python
+# SAP Sales Cloud Authentication Setup
+class SAPAuthManager:
+    def __init__(self, config: dict):
+        self.tenant_url = config['tenant_url']
+        self.auth_type = config.get('auth_type', 'basic')  # 'basic' or 'certificate'
+        
+    async def get_auth_headers(self):
+        if self.auth_type == 'basic':
+            return await self._basic_auth()
+        elif self.auth_type == 'certificate':
+            return await self._certificate_auth()
+    
+    async def _basic_auth(self):
+        # Dedicated API user with technical role
+        username = os.getenv('SAP_API_USERNAME')
+        password = os.getenv('SAP_API_PASSWORD')
+        credentials = base64.b64encode(f"{username}:{password}".encode()).decode()
+        return {"Authorization": f"Basic {credentials}"}
+    
+    async def _certificate_auth(self):
+        # Certificate-based authentication for higher security
+        cert_path = os.getenv('SAP_CLIENT_CERT_PATH')
+        key_path = os.getenv('SAP_CLIENT_KEY_PATH')
+        
+        # Implementation for certificate authentication
+        return {"X-Client-Certificate": "certificate_data"}
+```
 
-5.1.4.1. Single Note/Meeting Summarization: Automated abstractive summaries, key element inclusion (discussion points, decisions), action item integration, configurable length & detail, entity highlighting.
-5.1.4.2. Multi-Note & Historical Account Summarization: Longitudinal synthesis (from series of notes for an account/entity), trend & pattern identification (recurring themes, issues, progress), user-defined scope (number of notes, time range, focus topics).
-5.1.4.3. Customizable Summary Content & Formatting: Focus areas/aspects (user-guided), selectable output formats (narrative, bullets, structured reports), (Advanced) template-based summaries.
-5.1.4.4. Interactive & Iterative Summarization: Editable summaries (user corrections as feedback), regeneration options (with adjusted parameters), source linking ("Drill-Down") to original note context.
-5.1.4.5. (Advanced) Purpose-Driven & Contextual Summaries: Role-based summaries, "What's New?" summaries.
-5.1.4.6. Transparency & Confidence: Confidence indication, factual grounding (distinguish stated facts vs. AI inferences).
-5.1.5. Note Management & Organization (Step 5)
+#### **Integration with AG-UI for SAP Operations**
+```typescript
+// Frontend: SAP-specific AG-UI interactions
+function SAPOpportunityManager() {
+  const { stream, state } = useAGUI({
+    endpoint: '/api/agent/sap-opportunity'
+  });
 
-5.1.5.1. Secure Storage & Archival: Primary storage of approved note text/key AI outputs in Connected CRM System (if fields allow & desired), application-specific data storage (for AI metadata, versions, feedback not suitable for CRM), attachment handling (linked to note in CRM or app DB), configurable data retention policies, note versioning.
-5.1.5.2. Powerful & Intuitive Search & Retrieval: Comprehensive full-text search across note content; search by metadata (date, user, tags), linked CRM entities, AI-extracted information (action items, decisions, topics, entities); advanced filtering & sorting; quick access views for CRM entities; (Advanced) Natural Language Search for notes.
-5.1.5.3. Organization & Contextual Linking: Flexible CRM associations (single note to multiple CRM entities); Note-to-note linking (manual & AI-suggested); user-defined tagging & categorization; (Optional) Workspace/folder structure.
-5.1.5.4. Access Control & Security for Notes: CRM permissions enforcement for notes mastered in CRM; application-specific RBAC for app-managed data; principle of least privilege; audit trails for note access.
-5.1.5.5. Data Synchronization & Integrity with Connected CRM System(s) (for Notes): Core note data synchronization; mapping AI outputs to CRM (configurable); conflict resolution strategies; synchronization status & error handling.
-5.1.6. User Interaction & Refinement for Notes (Step 6)
+  const handleCreateOpportunity = async (opportunityData) => {
+    await stream.emit({
+      type: 'USER_INPUT',
+      data: {
+        action: 'create_opportunity',
+        sap_data: opportunityData,
+        require_approval: true
+      }
+    });
+  };
 
-5.1.6.1. Unified & Contextual Review Interface: Side-by-side or overlay views; clear differentiation of original vs. AI-modified content.
-5.1.6.2. Granular Editing, Approval & Rejection Controls: For extracted items (accept, reject, edit, add, delete); for processed text & summaries (direct editing, accept/reject suggestions); (Optional) bulk operations.
-5.1.6.3. AI Confidence Visualization & Explanations: Display confidence scores; (Advanced) brief explanations for AI suggestions.
-5.1.6.4. Seamless Source Linking & Traceability: Click-to-source from AI output to original note context.
-5.1.6.5. Comprehensive Feedback Mechanisms (for AI Model Improvement): Direct feedback tools (thumbs up/down, ratings, flag error, comments); implicit feedback collection (user corrections automatically logged).
-5.1.6.6. (Optional) Notifications for Review: Alert users when notes are processed.
-5.1.6.7. (Advanced) User Preferences for AI Interaction (Notes): Configurable automation levels; display preferences.
-5.1.6.8. Interactive Chat for Note Refinement (Links to 5.4. Interactive Chat): Conversational clarification and modification of note-derived content.
-5.2. AI-Generated Email Drafts (Corresponds to original user PRD 5.3.4)
+  return (
+    <div className="sap-opportunity-manager">
+      {state.events.map(event => (
+        <div key={event.id}>
+          {event.type === 'TOOL_CALL_START' && 
+           event.data.tool.includes('sap') && (
+            <div className="sap-operation">
+              🔄 Executing SAP operation: {event.data.tool}
+              <div className="sap-progress">
+                Connecting to SAP Sales Cloud...
+              </div>
+            </div>
+          )}
+          
+          {event.type === 'USER_INPUT_REQUEST' && 
+           event.data.sap_validation_required && (
+            <SAPValidationDialog 
+              data={event.data}
+              onApprove={() => stream.sendUserInput({approved: true})}
+              onReject={() => stream.sendUserInput({approved: false})}
+            />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
 
-5.2.1. Email Draft Initiation & Triggers: From Processed Notes; From Identified Action Items; From Calendar Events; From Prospect Activity; Ad-hoc User Command; (Advanced) Automated Triggers.
-5.2.2. Content Generation & AI Capabilities: Dynamic Content Population (from notes, connected CRM system data, chat context, user instructions); Tone, Style & Length Adjustment; Multi-Language Support; Intelligent Subject Line Generation; Automatic Inclusion of Signatures & Branding; Attachment Management (suggest from connected CRM or recent files).
-5.2.3. Templating System: Library of Predefined System Templates; User-Created & Sharable Custom Templates (with placeholders); AI-Powered Template Suggestion; Easy Template Management Interface.
-5.2.4. Personalization & Contextual Relevance: Recipient-Specific Personalization (using data from connected CRM system); Contextual Awareness (previous communications, deals, issues).
-5.2.5. Review, Edit, Approval & Sending Workflow: Intuitive Draft Presentation; Comprehensive Inline Editing Tools; (Optional) Track Changes/Suggestion Highlighting; Explicit Approval Step; Flexible Sending Options (Direct Send via integrated email service, Send via Connected CRM, Open in Default Email Client, Copy to Clipboard); Save Draft Functionality.
-5.2.6. Logging & CRM Synchronization: Audit Log of Drafts; Activity Logging in Connected CRM System (associating with relevant records).
-5.3. Task Creation and Management (Corresponds to original user PRD 5.3.5)
+---
 
-5.3.1. Integration with External Task Systems: Connected CRM Task Modules (primary); (Future Consideration) Dedicated Task Management Tools.
-5.3.2. Task Creation Process from Approved Action Items: Automated Task Generation in connected CRM; Comprehensive Field Mapping (Subject, Description, Due Date, Priority, Status); Assignee Resolution & Mapping (to users in target system); Link to AI Application Source (for context); Association with Core CRM Entities.
-5.3.3. Task Synchronization (Bidirectional where feasible): Status Synchronization; Key Field Updates Synchronization (conflict resolution applies).
-5.3.4. Task Visibility & Management Interface (Within the AI Application - Scope to be confirmed): (Optional) Consolidated Task View; (Optional) Quick Task Actions (syncs back); (Optional) Advanced Filtering & Sorting.
-5.3.5. Notifications & Reminders for Tasks: Leverage Native System Notifications (primary); (Optional) Supplementary AI App Reminders.
-5.4. Interactive Chat for Additional Details (Corresponds to original user PRD 5.3.6)
+## 🏗 **MCP + AG-UI Architecture Integration**
 
-5.4.1. Core Chat Functionality & Purpose: Conversational AI Agent Interface; Multi-Turn Dialog Management; Command, Control, and Query capabilities; Content Refinement & Modification; On-Demand Clarification & Elaboration; Immediate Feedback Channel.
-5.4.2. Natural Language Understanding (NLU) & Processing: Robust Intent Recognition; Entity Extraction from Chat Input; Advanced Context Management (session, item-specific, recent interactions); Disambiguation & Clarification; Linguistic Flexibility.
-5.4.3. Integration with Broader System Capabilities: Unified Interface to AI Functions (note processing, email, tasks, docs, calendar); In-Chat Display of Information & Results (or links).
-5.4.4. AI Responses & Conversational Actions: Clear & Informative Responses; Action Confirmation & Feedback; Handling of Unsupported Queries (graceful failure).
-5.4.5. User Interface (UI) & User Experience (UX) for Chat: Standard Chat Interaction Elements; Readability & Accessibility; Easy Access & Discoverability; (Optional but Recommended) Support for Rich Content (formatted text, links, cards); Copy & Paste Functionality.
-5.4.6. Chat History, Logging & Personalization: Persistent & Searchable Chat History; Data for AI Improvement (anonymized, consented); (Advanced) User-Specific Context & Personalization.
-5.5. Document Access and Retrieval (Corresponds to original user PRD 5.3.7)
+### **Protocol Interaction Flow**
+```
+User Interface (React + AG-UI) 
+    ↕️ Real-time event streaming
+AI Agent Engine (Python/FastAPI)
+    ↕️ Standardized tool/data access  
+MCP Servers (CRM, Docs, Calendar, etc.)
+```
 
-5.5.1. Supported Document Sources & Repositories: Connected CRM Systems; Integrated Cloud Storage Solutions (e.g., SharePoint, Google Drive - scope per solution); (Advanced) Enterprise DMS (Future); (Advanced & Optional) Email Attachments from Connected Accounts.
-5.5.2. Document Indexing, Search, & Retrieval Capabilities: Secure Indexing Strategy (if native search insufficient, consent & permissions respected); Multi-faceted Search & Retrieval Logic (Keyword, Semantic, Metadata); Optical Character Recognition (OCR) for Image-Based Documents.
-5.5.3. AI-Powered Retrieval Triggers & Contextual Intelligence: Explicit Mentions in Notes/Chat; Contextual Retrieval (based on note/meeting/chat context, email drafts, action items); (Advanced, privacy-aware) Historical Usage Patterns; User-Initiated Search via Chat/Commands.
-5.5.4. Presentation & User Interaction with Retrieved Documents: Clear & Informative Presentation (filename, source, date, snippet); Direct Links & Native Opening; (Optional) In-Application Preview; Mandatory User Confirmation Before Use in communications/outputs; Disambiguation & Refinement Tools.
-5.5.5. Security & Permissions Enforcement (Critical): Strict Adherence to Native Permissions of source repositories; User-Contextual Access; No Privilege Escalation Guarantee; Comprehensive Audit Logging.
-5.5.6. Supported Document Types & Content Extraction: Common Business Document Formats (PDF, Office, TXT, etc.); Handling of Unsupported Types (retrieval by metadata, no content processing).
-5.6. Calendar Integration (Corresponds to original user PRD 5.3.8)
+### **Core Architecture Components**
 
-5.6.1. Supported Calendar Platforms & Secure Authentication: Core Platform Support (Microsoft Outlook Calendar, Google Calendar); (Consideration) Additional Platforms (e.g., Apple Calendar); Secure Authentication (OAuth 2.0 preferred); Granular Permissions Request (clear communication of scope).
-5.6.2. Core Calendar Operations: Availability Checking (self, others with permission); Create & Send Meeting Invitations (Title, Attendees, Time, Location/Video Conf, Description; via native platform); Update Existing Meetings; Cancel Existing Meetings; View Upcoming Meetings (contextualized for CRM entities if possible).
-5.6.3. AI-Assisted Scheduling & Calendar Intelligence: Optimal Time Finding (considering availability, working hours, time zones); "Find Next Available Slot" Feature; Natural Language Scheduling (via Chat); Robust Time Zone Management; Recurring Meeting Support; Intelligent Meeting Parameter Defaults; (Advanced) Travel Time Consideration.
-5.6.4. Contextual Calendar Information for Enhancing AI Functionality: Pre-populate Note-Taking Context; Proactive Prompts & Information Surfacing (for upcoming meetings); Linking AI Artifacts (notes, actions) to Calendar Events.
-5.6.5. Synchronization with Connected CRM System(s): Activity Logging in CRM (for relevant events); CRM Record Association; Update & Cancellation Sync; User Control over Synchronization rules.
-5.6.6. User Interface (UI) for Calendar Features within the AI Application: Contextual Calendar Information Display (not full client replication); Efficient Meeting Scheduling Interface.
-5.6.7. Permissions, Privacy & Secure Data Handling: Adherence to Granted Permissions; Respect for Attendee Privacy; Secure Data Practices.
-5.6.8. (Advanced/Optional) Meeting Resource Management & Conferencing Integration: Resource Booking (rooms, etc., if API supports); Video Conferencing Integration (auto-generate links for Teams, Meet, Zoom if accounts connected).
-5.7. Prospect Activity Tracking (Corresponds to original user PRD 5.4)
+#### **AG-UI Frontend Layer**
+```typescript
+// Real-time agent interaction
+interface AGUIEvent {
+  type: AGUIEventType;
+  data: any;
+  threadId: string;
+  timestamp: string;
+}
 
-5.7.1. Prospect Data Display
-5.7.1.1. Data Source & Contextual Presentation: Sourced from connected CRM(s); displayed contextually; dedicated panel/section.
-5.7.1.2. Comprehensive Data Points: Prospect/Contact/Lead Info (name, title, company, email, phone, CRM link); Associated Account Details; Opportunity/Deal Info (name, stage, value, probability, close date, competitors); Lead & Ownership Info (source, creation date, owner); (Configurable) Key Custom CRM Fields.
-5.7.1.3. Handling Multiple Prospects/Opportunities: Clear listing and differentiation.
-5.7.1.4. Data Freshness Indication: Indication of last sync if not real-time.
-5.7.2. Activity History Visualization
-5.7.2.1. Comprehensive Activity Sourcing: From connected CRM(s), integrated email (if read access), calendar integration, AI app notes/insights, tasks.
-5.7.2.2. Standardized Activity Display: Type (icons), Date & Time, Description/Summary, Status (visual indicators), Outcome/Result (if available), Associated Content/Links.
-5.7.2.3. Visualization & Interaction: Reverse chronological list or timeline; default view of recent activities with "Load More"; Filtering & Sorting (by type, date, status, keywords).
-5.7.2.4. (Advanced) AI-Enhanced Activity Insights: Engagement summary (e.g., last contact), silence detection.
-5.7.3. AI-Suggested Actions (for prospects)
-5.7.3.1. Triggers & Context for Suggestions: When viewing prospect, after new activity, proactive timed analysis; highly contextual.
-5.7.3.2. Types of AI-Suggested Actions: Communication Prompts (draft email, schedule meeting, call reminder); Task Creation (in CRM); CRM Data Updates suggestions; Information Sharing (relevant docs); Engagement Nudges.
-5.7.3.3. Basis for AI Suggestions: Activity Analysis (recency, frequency, silence); Engagement Level Monitoring (email opens, etc., if available); Sales Playbook/Methodology Adherence (configurable/learnable); (Advanced) Historical Success Pattern Analysis; CRM Data Triggers (opportunity stage, etc.); Insights from Processed Notes & Communications.
-5.7.3.4. Presentation & Prioritization of Suggestions: Dedicated "Next Best Action" interface; Clear Rationale for each suggestion; Prioritization based on impact/urgency (visual cues).
-5.7.3.5. User Interaction with Suggested Actions: One-Click Execution (where feasible); Modify Before Execution; Dismiss & Feedback (with reason); Snooze/Remind Later.
-5.7.3.6. Continuous Learning Loop: AI learns from user interactions with suggestions to improve future recommendations.
-6. Technical Requirements
+// 16 Standard AG-UI Event Types:
+- TEXT_MESSAGE_CONTENT    // Streaming text
+- TOOL_CALL_START        // MCP tool execution begins
+- TOOL_CALL_END          // MCP tool execution complete
+- STATE_DELTA            // Incremental state updates
+- ERROR                  // Error handling
+- LIFECYCLE_START        // Agent workflow begins
+- LIFECYCLE_END          // Agent workflow complete
+- USER_INPUT_REQUEST     // Human-in-the-loop input
+- PROGRESS_UPDATE        // Progress indicators
+- CONTEXT_UPDATE         // Context changes
+- CANCELLATION           // User cancellation
+- AUTHENTICATION         // Auth events
+- RESOURCE_UPDATE        // Resource state changes
+- MEDIA_CONTENT          // Media streaming
+- CUSTOM_EVENT           // App-specific events
+- BATCH_EVENTS           // Grouped events
+```
 
-6.1. CRM Integration Framework (Revised based on multi-CRM strategy)
+#### **MCP Backend Integration**
+```python
+# MCP Server Architecture
+class MCPServerManager:
+    servers: Dict[str, MCPServer] = {
+        'salesforce': SalesforceMCPServer(),
+        'google_drive': GoogleDriveMCPServer(),
+        'calendar': CalendarMCPServer(),
+        'email': EmailMCPServer(),
+        'database': DatabaseMCPServer(),
+        'web_search': WebSearchMCPServer()
+    }
+    
+    async def execute_tool(self, server_name: str, tool_name: str, params: dict):
+        server = self.servers[server_name]
+        return await server.call_tool(tool_name, params)
+        
+    async def get_resources(self, server_name: str, filters: dict):
+        server = self.servers[server_name]
+        return await server.list_resources(filters)
+```
 
-6.1.1. Core Integration Strategy & Philosophy: Support multiple major CRM platforms via pre-built cloud connectors; define strategy for prioritizing/adding new CRM connectors; utilize an internal abstraction layer or common data model.
-6.1.2. Connector Architecture & Capabilities: Standardized architecture for connectors; baseline data objects/operations across CRMs; acknowledge potential variations based on CRM API limitations (documented per CRM); aim for bidirectional data sync where APIs permit.
-6.1.3. Data Synchronization with Connected CRMs: Configurable sync frequency (near real-time or scheduled); define data to be synchronized (Accounts, Contacts, Opportunities, Notes/AI insights, Activities, Tasks); conflict resolution strategies; sync status monitoring & error reporting.
-6.1.4. Authentication and Authorization for Connected CRMs: Secure, industry-standard authentication (OAuth 2.0 preferred); secure management of credentials/tokens; operate within user-granted permissions; respect connected CRM's RBAC and sharing rules.
-6.1.5. Application API Requirements: Use RESTful APIs for own exposure (if any) and integrations; optimize external API calls for performance, rate limits; implement rate limiting, throttling, retry mechanisms; handle API versioning; maintain API documentation.
-6.1.6. Connector Management Interface: Administrative interface for adding/removing connectors, managing authorization, configuring settings, monitoring status/health, accessing logs/troubleshooting tools.
-6.2. AI Technology Implementation (Based on user's original PRD, aligned with strategy)
+### **Data Flow Architecture**
 
-6.2.1. Gemini Pro 2.5 (or successor) Integration: The application shall integrate with Gemini Pro 2.5 (or its subsequent, stable production versions) for its core AI capabilities, likely via managed APIs (e.g., through Google Cloud Vertex AI). Integration shall use the latest stable API version and official SDKs.
-6.2.2. AI Model Training and Fine-tuning:
-The application shall leverage pre-trained Gemini Pro models, with capabilities for domain-specific fine-tuning where appropriate and feasible.
-Fine-tuning shall focus on: Sales and customer support terminology, Industry-specific language and concepts, Organization-specific processes and workflows (if customer-specific fine-tuning is supported).
-The application shall support continuous improvement of AI models based on user feedback (explicit and implicit) collected through the application (as per 5.1.6.5, 5.4.3.6).
-Training and fine-tuning data, especially if sourced from multiple customer CRM systems, must be anonymized, aggregated, and handled according to strict data privacy, security requirements, and user consent.
-6.2.3. Performance Requirements:
-AI processing shall complete within acceptable timeframes to ensure a responsive user experience for typical usage scenarios. (Specific timings like "< 2 seconds" were removed based on user feedback; "acceptable" needs to be defined through testing and user feedback).
-The application shall provide clear visual indicators to the user during AI processing.
-Background processing shall be utilized for operations that could otherwise negatively impact UI responsiveness, ensuring a fluid user experience.
-Performance metrics related to AI processing times and system responsiveness shall be continuously collected and analyzed. These metrics will inform ongoing optimization efforts and help refine what constitutes "acceptable timeframes."
-6.2.4. Accuracy Requirements:
-AI capabilities shall meet or exceed defined minimum accuracy thresholds, to be established and validated during development and testing. Examples from original PRD (targets to be validated):
-Voice-to-text conversion: > 95% accuracy
-Spelling and grammar correction: > 98% accuracy
-Action item extraction: > 90% accuracy
-Meeting details extraction (from notes/calendar): > 85% accuracy
-The application shall provide confidence scores for AI-generated content where appropriate, helping users gauge reliability.
-Users shall be able to provide feedback on AI accuracy to facilitate continuous improvement of future performance.
-Regular accuracy assessments shall be conducted with representative test data sets.
-6.3. Data Requirements (Based on user's original PRD, aligned with strategy)
+#### **1. Input Processing Flow**
+```
+Voice/Text Input → AG-UI Events → AI Agent → MCP Tools → Data Sources
+                                      ↓
+Real-time UI Updates ← AG-UI Stream ← Agent Processing ← MCP Responses
+```
 
-6.3.1. Data Storage:
-The application shall store data in compliance with company data policies and relevant regulations (e.g., GDPR, CCPA).
-Primary master data for CRM entities (Accounts, Contacts, Opportunities, etc.) shall remain within the connected CRM system(s). The AI application will read from and write to these systems via connectors.
-Application-specific data (e.g., user profiles for the AI app, AI model feedback, processed note metadata not suitable for CRM, chat history, audit logs, application configuration) shall be stored in secure, scalable database systems managed by the application.
-Data partitioning strategies shall be implemented for application databases as needed for performance and scalability.
-Data retention policies for application-specific data shall be configurable according to business requirements and regulations.
-6.3.2. Data Retrieval:
-The application shall implement efficient data retrieval mechanisms for both its internal data stores and for accessing data from connected CRM systems and document repositories.
-Caching strategies (e.g., for frequently accessed CRM data, user preferences, configuration) shall be used judiciously to improve performance and reduce load on external systems, while ensuring data freshness.
-Search functionality within the application (for notes, documents, etc.) shall be optimized for performance and relevance.
-Data pagination shall be implemented for displaying large data sets in the UI.
-The application shall support both synchronous and asynchronous data retrieval as appropriate for the use case to maintain UI responsiveness.
-6.3.3. Data Backup and Recovery:
-The application's managed data stores (application databases, object storage for AI artifacts, etc.) shall be subject to regular automated backups.
-Backup frequency and retention periods shall be configurable and align with business continuity and disaster recovery (BCDR) plans. RPO (Recovery Point Objective) and RTO (Recovery Time Objective) targets must be defined.
-Point-in-time recovery (PITR) capabilities shall be supported for critical application databases where feasible.
-Disaster recovery procedures for the application and its data shall be documented and regularly tested.
-Data integrity checks shall be performed periodically and as part of backup and recovery operations.
-(Note: Backup/recovery for data residing within connected CRM systems is the responsibility of those CRM providers/customers).
-6.4. Security and Compliance (Based on user's original PRD, aligned with strategy)
+#### **2. CRM Integration Flow**
+```
+User Request → AG-UI → Agent → Salesforce MCP Server → Salesforce API
+                                        ↓
+UI Update ← AG-UI Events ← Agent Response ← MCP Data Response
+```
 
-6.4.1. Data Protection:
-The application shall encrypt sensitive data both in transit (e.g., using TLS 1.2+ for all communications) and at rest (e.g., using AES-256 or stronger encryption for application databases and stored files). Cloud provider key management services (KMS) should be utilized.
-Personal Identifiable Information (PII) obtained from users or connected systems shall be handled strictly in accordance with relevant data protection regulations (e.g., GDPR, CCPA, and others as applicable).
-Data masking or anonymization techniques shall be implemented for sensitive information when used in non-production (e.g., development, testing) environments.
-Regular security assessments (e.g., penetration testing, vulnerability scanning) shall be conducted to identify and address potential vulnerabilities in the application and its infrastructure.
-6.4.2. Access Control:
-The application shall implement robust role-based access control (RBAC) for its own functionalities and data.
-The principle of least privilege shall be applied to all user roles and system service accounts.
-Access to administrative functions and sensitive AI configuration settings shall be strictly controlled.
-For data accessed from connected CRM systems, document repositories, or calendar platforms, the application shall always operate within the permissions granted by the authenticated user for that specific external system and shall not enable privilege escalation.
-Session management for the AI application shall include appropriate timeout mechanisms, secure token handling (e.g., JWTs), and protection against session hijacking.
-Failed authentication attempts shall be monitored, and appropriate account lockout policies shall be applied to mitigate brute-force attacks.
-6.4.3. Audit Logging:
-The application shall maintain comprehensive and tamper-evident audit logs for security monitoring, compliance, and troubleshooting purposes.
-Audit logs shall include, but not be limited to:
-User authentication events (logins, logouts, failed attempts).
-Data access and modification events (especially for sensitive data and configurations).
-Administrative actions performed within the AI application.
-System configuration changes.
-Integration activities (e.g., connections established/failed with CRMs, significant data sync events).
-Key AI agent actions performed on behalf of users (e.g., email drafts generated, tasks created).
-Access to sensitive documents or PII.
-Audit logs shall be stored securely and protected against unauthorized modification or deletion.
-Log retention periods shall comply with company policies and relevant regulatory requirements.
-Tools or mechanisms for analyzing audit logs should be available for security monitoring and compliance reporting.
-6.4.4. Compliance Recommendations:
-The application should be designed and built with controls to support compliance with major data protection and privacy regulations, including but not limited to:
-General Data Protection Regulation (GDPR) for users in the European Economic Area.1   
-1.
-data-policy.thepdfmaker.com
-data-policy.thepdfmaker.com
-California Consumer Privacy Act (CCPA) / California Privacy Rights Act (CPRA) for users in California.
-Other relevant regional or industry-specific regulations (e.g., HIPAA if handling healthcare-related information, though not explicitly scoped here).
-The system design should facilitate data subject rights (e.g., access, rectification, erasure) for data managed directly by the application. For data mastered in connected CRMs, these rights would typically be handled via the CRM itself.
-6.5. Recommended Technical Architecture & Stack Considerations
-(This section was detailed in the previous response, outlining Architectural Principles and Proposed Technical Stack Components: Cloud Platform (GCP recommended), Frontend (React/TS), Backend (Python/FastAPI or Node.js/NestJS), AI/ML Layer (Gemini via Vertex AI, Vector DB), Data Layer (PostgreSQL, NoSQL option, Object Storage, BigQuery), Integration Layer (Connectors, Message Queue, API Gateway), and DevOps & Operations tools. The caveats about this being a high-level recommendation apply.)
+#### **3. Document Processing Flow**
+```
+Document Upload → AG-UI File Event → Agent → Google Drive MCP → Document Analysis
+                                              ↓
+Streaming Results ← AG-UI State Deltas ← Progressive Processing ← MCP Operations
+```
 
-7. Non-Functional Requirements
-(This section would typically detail NFRs like Performance (specific metrics beyond AI processing), Scalability, Availability, Reliability, Usability, Maintainability, Security (specific standards beyond compliance), Internationalization (i18n) / Localization (l10n). We've touched on some of these, but they'd be formally defined here.)
+### **Protocol Benefits in Our Use Cases**
 
-8. Release Criteria
-(Defines conditions that must be met for the product to be released, e.g., features completed, bugs fixed, performance targets met, documentation ready. Placeholder.)
+#### **MCP Advantages**
+- **Standardized CRM Access**: One protocol for Salesforce, HubSpot, Dynamics
+- **Universal Document Access**: Same interface for Drive, SharePoint, local files
+- **Tool Composability**: Mix and match data sources without custom integrations
+- **Security Enforcement**: Built-in permission management across systems
+- **Ecosystem Growth**: Leverage community-built MCP servers
 
-9. Glossary
-(Definitions of key terms used in the PRD. Placeholder.)
+#### **AG-UI Advantages**
+- **Real-time Collaboration**: Human-in-the-loop workflows with streaming updates
+- **Interactive Agent Control**: Cancel, modify, approve operations in real-time
+- **Rich User Experience**: Progress indicators, state visualization, error handling
+- **Framework Agnostic**: Works with any AI framework (LangChain, CrewAI, custom)
+- **Future-Proof**: Standard protocol supported by major AI providers
 
-Appendix
-(Supporting materials, mockups, diagrams, etc. Placeholder.)
+---
+
+## 📋 **Phase-Based Development Breakdown**
+
+### **PHASE 1: Foundation & Protocol Integration** 
+*Estimated Duration: 5-7 weeks*
+
+#### **1.1 Project Setup & Architecture** ⭐⭐ *Difficulty: Medium*
+- [ ] Initialize project repository with MCP + AG-UI structure
+- [ ] Set up development environment (React + TypeScript frontend)
+- [ ] Configure backend framework (Python/FastAPI or Node.js/NestJS)
+- [ ] Set up database (PostgreSQL + Redis for caching)
+- [ ] Configure CI/CD pipeline
+- [ ] Set up testing framework for both protocols
+- [ ] Create Docker containers for development
+- [ ] Install MCP SDK (Python/TypeScript)
+- [ ] Install AG-UI SDK (Python/TypeScript)
+
+#### **1.2 MCP Foundation Setup** ⭐⭐⭐ *Difficulty: Hard*
+- [ ] Implement MCP client architecture in backend
+- [ ] Set up MCP server discovery and management
+- [ ] Create MCP connection manager with authentication
+- [ ] Implement basic MCP resource and tool interfaces
+- [ ] Set up MCP error handling and retry logic
+- [ ] Create MCP configuration management system
+- [ ] Add MCP audit logging and monitoring
+
+#### **1.3 AG-UI Foundation Setup** ⭐⭐⭐ *Difficulty: Hard*
+- [ ] Implement AG-UI event streaming architecture
+- [ ] Set up Server-Sent Events (SSE) infrastructure
+- [ ] Create AG-UI event types and handlers (16 standard events)
+- [ ] Implement real-time state synchronization
+- [ ] Set up WebSocket fallback for AG-UI events
+- [ ] Create AG-UI middleware layer
+- [ ] Add thread management and cancellation support
+
+#### **1.4 Authentication & User Management** ⭐⭐ *Difficulty: Medium*
+- [ ] Implement OAuth 2.0 authentication system
+- [ ] Create user registration/login flows
+- [ ] Set up role-based access control (RBAC)
+- [ ] Implement session management with AG-UI support
+- [ ] Create user profile management
+- [ ] Add password reset functionality
+
+#### **1.5 AG-UI Frontend Framework** ⭐⭐⭐ *Difficulty: Hard*
+- [ ] Implement AG-UI React components for agent interaction
+- [ ] Create real-time event handling and state management
+- [ ] Set up streaming UI components (chat, progress, status)
+- [ ] Implement agent lifecycle visualization
+- [ ] Add interactive controls (cancel, retry, modify)
+- [ ] Create responsive layout for agent interactions
+- [ ] Add accessibility compliance for streaming content
+
+---
+
+### **PHASE 2: AI Agent & MCP Data Integration** 
+*Estimated Duration: 6-8 weeks*
+
+#### **2.1 Core AI Agent with AG-UI** ⭐⭐⭐ *Difficulty: Hard*
+- [ ] Set up Google Cloud Vertex AI integration (Gemini Pro)
+- [ ] Implement AG-UI compatible AI agent architecture
+- [ ] Create agent execution engine with event streaming
+- [ ] Add confidence scoring and error handling
+- [ ] Implement agent state management and persistence
+- [ ] Set up model versioning and fallback strategies
+- [ ] Create agent lifecycle management (start, pause, cancel, resume)
+
+#### **2.2 MCP Server Implementations** ⭐⭐⭐⭐ *Difficulty: Very Hard*
+- [ ] **CRM MCP Servers**: 
+  - Salesforce MCP server (accounts, contacts, opportunities)
+  - HubSpot MCP server (deals, companies, contacts)  
+  - **SAP Sales Cloud MCP server** (business objects via REST APIs)
+  - Pipedrive MCP server (deals, persons, organizations)
+- [ ] **Document MCP Server**: Google Drive, SharePoint integration
+- [ ] **Calendar MCP Server**: Google Calendar, Outlook integration
+- [ ] **Email MCP Server**: Gmail, Outlook email access
+- [ ] **Database MCP Server**: PostgreSQL for internal data
+- [ ] **File System MCP Server**: Local file operations
+- [ ] **Web Search MCP Server**: Search capabilities for research
+
+#### **2.3 Voice Processing with MCP Integration** ⭐⭐⭐⭐ *Difficulty: Very Hard*
+- [ ] Real-time voice transcription via MCP audio server
+- [ ] Audio preprocessing MCP tools (noise reduction, normalization)
+- [ ] Speaker diarization through MCP services
+- [ ] Language detection with streaming AG-UI updates
+- [ ] Background recording with MCP permission management
+- [ ] Audio file upload processing via MCP file handlers
+
+#### **2.4 Text Processing Engine with AG-UI Streaming** ⭐⭐⭐ *Difficulty: Hard*
+- [ ] Streaming text normalization with real-time AG-UI updates
+- [ ] Grammar/spelling correction with user feedback via AG-UI
+- [ ] Progressive text enhancement with state deltas
+- [ ] Custom dictionary management via MCP resources
+- [ ] Real-time formatting suggestions through AG-UI events
+- [ ] Collaborative text editing via shared AG-UI state
+
+#### **2.5 Information Extraction with Real-time Streaming** ⭐⭐⭐⭐ *Difficulty: Very Hard*
+- [ ] Streaming Named Entity Recognition with AG-UI events
+- [ ] Real-time action item extraction with user validation
+- [ ] Progressive decision logging with contextual updates
+- [ ] Live topic extraction with confidence streaming
+- [ ] Interactive sentiment analysis with AG-UI feedback
+- [ ] Incremental entity linking to MCP data sources
+
+---
+
+### **PHASE 3: Interactive Note Management with AG-UI** 
+*Estimated Duration: 4-5 weeks*
+
+#### **3.1 AG-UI Note Capture System** ⭐⭐⭐ *Difficulty: Hard*
+- [ ] Real-time multi-modal input with AG-UI streaming
+- [ ] Live transcription display with progressive updates
+- [ ] Interactive voice controls (pause/resume) via AG-UI
+- [ ] Collaborative note editing with shared state
+- [ ] Real-time auto-save with conflict resolution
+- [ ] Offline capability with sync status via AG-UI events
+- [ ] Email forwarding with processing status streaming
+
+#### **3.2 MCP-Powered Contextual Association** ⭐⭐⭐ *Difficulty: Hard*
+- [ ] Real-time CRM entity suggestion via MCP
+- [ ] Smart tagging based on MCP data sources
+- [ ] Contextual document linking through MCP servers
+- [ ] Automatic contact/account association
+- [ ] Historical context retrieval from MCP resources
+- [ ] Intelligent categorization suggestions
+
+#### **3.3 Streaming Summarization Engine** ⭐⭐⭐⭐ *Difficulty: Very Hard*
+- [ ] Progressive summarization with AG-UI state deltas
+- [ ] Interactive summary refinement with user feedback
+- [ ] Multi-note historical synthesis via MCP data
+- [ ] Real-time summary quality scoring
+- [ ] Template-based generation with live preview
+- [ ] Collaborative summary editing with shared state
+- [ ] Source linking with drill-down via AG-UI interactions
+
+#### **3.4 Intelligent Note Management** ⭐⭐⭐ *Difficulty: Hard*
+- [ ] MCP-powered search across all data sources
+- [ ] Real-time search suggestions via AG-UI
+- [ ] Interactive filtering with live results
+- [ ] Smart note organization via AI suggestions
+- [ ] Version control with collaborative editing
+- [ ] Access control with MCP permission enforcement
+
+---
+
+### **PHASE 4: Advanced MCP Integration Framework** 
+*Estimated Duration: 6-8 weeks*
+
+#### **4.1 MCP Server Architecture & Management** ⭐⭐⭐⭐ *Difficulty: Very Hard*
+- [ ] Dynamic MCP server discovery and registration
+- [ ] MCP server health monitoring and failover
+- [ ] Connection pooling and rate limiting per server
+- [ ] MCP server authentication and security management
+- [ ] Server capability detection and feature mapping
+- [ ] Load balancing across multiple MCP instances
+- [ ] MCP server deployment and scaling infrastructure
+
+#### **4.2 Advanced CRM MCP Integrations** ⭐⭐⭐⭐ *Difficulty: Very Hard*
+- [ ] **Salesforce MCP Server**: Complete CRUD operations, custom objects
+- [ ] **HubSpot MCP Server**: Deal pipelines, contact management, analytics
+- [ ] **SAP Sales Cloud V2 MCP Server**: Business objects API integration, authentication management
+- [ ] **Microsoft Dynamics MCP Server**: Entity relationships, workflows
+- [ ] **Pipedrive MCP Server**: Activity tracking, goal management
+- [ ] **Custom CRM MCP Server**: Generic REST API connector
+- [ ] **Multi-CRM Data Harmonization**: Unified data model across CRMs
+
+#### **4.3 Enterprise Data MCP Servers** ⭐⭐⭐⭐ *Difficulty: Very Hard*
+- [ ] **Database MCP Servers**: PostgreSQL, MySQL, SQL Server
+- [ ] **Data Warehouse MCP**: BigQuery, Snowflake, Redshift
+- [ ] **Analytics MCP Server**: Business intelligence data access
+- [ ] **Compliance MCP Server**: Audit trails, data governance
+- [ ] **Security MCP Server**: Permission management, access logs
+- [ ] **Backup & Recovery MCP**: Data protection and restoration
+
+#### **4.4 MCP Data Synchronization & Orchestration** ⭐⭐⭐⭐ *Difficulty: Very Hard*
+- [ ] Real-time bidirectional sync via MCP
+- [ ] Conflict resolution across multiple MCP sources
+- [ ] Event-driven data updates with MCP notifications
+- [ ] Data transformation pipelines between MCP servers
+- [ ] Cross-system transaction management
+- [ ] Data lineage tracking across MCP sources
+- [ ] Performance optimization and caching strategies
+
+---
+
+### **PHASE 5: AG-UI Communication & Task Features** 
+*Estimated Duration: 4-5 weeks*
+
+#### **5.1 Streaming Email Draft Generation** ⭐⭐⭐ *Difficulty: Hard*
+- [ ] Real-time AI email composition with AG-UI streaming
+- [ ] Interactive template system with live preview
+- [ ] Progressive tone and style adjustment via user feedback
+- [ ] Multi-language support with streaming translations
+- [ ] Live personalization based on MCP CRM data
+- [ ] Real-time subject line generation and A/B testing
+- [ ] Collaborative email editing with shared AG-UI state
+- [ ] Smart attachment suggestions via MCP document servers
+
+#### **5.2 Interactive Task Management via AG-UI** ⭐⭐⭐ *Difficulty: Hard*
+- [ ] Real-time task creation from action items with user validation
+- [ ] Live task assignment with MCP user directory integration
+- [ ] Progressive task breakdown with AI suggestions
+- [ ] Interactive task prioritization via AG-UI controls
+- [ ] Real-time task status updates across systems
+- [ ] Collaborative task planning with shared state
+- [ ] Smart deadline suggestions based on MCP calendar data
+- [ ] Task dependency mapping with visual updates
+
+#### **5.3 Advanced Interactive Chat System** ⭐⭐⭐⭐ *Difficulty: Very Hard*
+- [ ] Multi-agent orchestration via AG-UI protocol
+- [ ] Context-aware conversation with MCP data integration
+- [ ] Real-time agent thinking process visualization
+- [ ] Interactive tool usage with user approval workflows
+- [ ] Streaming code generation and execution results
+- [ ] Live data visualization and chart generation
+- [ ] Multi-modal chat (text, voice, documents) with AG-UI
+- [ ] Conversation branching and parallel execution
+
+#### **5.4 Human-in-the-Loop Agent Workflows** ⭐⭐⭐⭐ *Difficulty: Very Hard*
+- [ ] Interactive approval gates in agent workflows
+- [ ] Real-time user input collection during execution
+- [ ] Collaborative decision making with AI suggestions
+- [ ] Dynamic workflow modification based on user feedback
+- [ ] Multi-step process visualization with AG-UI
+- [ ] Cancellation and rollback capabilities
+- [ ] Workflow templates with customizable decision points
+- [ ] Audit trails of human-AI collaboration
+
+---
+
+### **PHASE 6: Advanced MCP Integrations & AG-UI Features** 
+*Estimated Duration: 5-6 weeks*
+
+#### **6.1 Calendar & Scheduling via MCP** ⭐⭐⭐ *Difficulty: Hard*
+- [ ] Google Calendar MCP server with real-time sync
+- [ ] Outlook Calendar MCP integration
+- [ ] Intelligent scheduling with AG-UI interactive flows
+- [ ] Multi-timezone coordination via MCP calendar data
+- [ ] Meeting resource booking through MCP servers
+- [ ] Video conferencing integration via MCP tools
+- [ ] Calendar conflict resolution with user interaction
+
+#### **6.2 Document Intelligence via MCP** ⭐⭐⭐⭐ *Difficulty: Very Hard*
+- [ ] Advanced document MCP servers (SharePoint, Google Drive)
+- [ ] Intelligent document search with AG-UI results
+- [ ] OCR processing via specialized MCP servers
+- [ ] Document collaboration with real-time AG-UI updates
+- [ ] Version control integration through MCP
+- [ ] Document template management via MCP resources
+- [ ] Secure document sharing with permission enforcement
+
+#### **6.3 Advanced Prospect Analytics via MCP + AG-UI** ⭐⭐⭐⭐ *Difficulty: Very Hard*
+- [ ] Real-time activity aggregation from multiple MCP sources
+- [ ] Interactive engagement analytics with AG-UI visualization
+- [ ] Predictive scoring with live updates
+- [ ] Opportunity progression tracking via MCP data
+- [ ] Communication pattern analysis with streaming insights
+- [ ] Competitive intelligence via MCP web search servers
+- [ ] Performance dashboards with real-time AG-UI updates
+
+#### **6.4 Multi-Agent Coordination** ⭐⭐⭐⭐ *Difficulty: Very Hard*
+- [ ] Agent orchestration via AG-UI protocol
+- [ ] Specialized agent deployment (research, writing, analysis)
+- [ ] Inter-agent communication and data sharing
+- [ ] Parallel agent execution with unified AG-UI interface
+- [ ] Agent performance monitoring and optimization
+- [ ] Dynamic agent scaling based on workload
+- [ ] Agent marketplace and plugin architecture
+
+---
+
+### **PHASE 7: Security, Compliance & Performance** 
+*Estimated Duration: 3-4 weeks*
+
+#### **7.1 Security Implementation** ⭐⭐⭐⭐ *Difficulty: Very Hard*
+- [ ] End-to-end encryption
+- [ ] Data masking for non-production
+- [ ] Audit logging system
+- [ ] Vulnerability scanning integration
+- [ ] Penetration testing preparation
+- [ ] GDPR compliance features
+
+#### **7.2 Performance Optimization** ⭐⭐⭐ *Difficulty: Hard*
+- [ ] Database query optimization
+- [ ] Caching strategy implementation
+- [ ] API rate limiting
+- [ ] Background job processing
+- [ ] Performance monitoring
+- [ ] Load testing and optimization
+
+---
+
+## 🛠 **Enhanced Technical Stack with MCP + AG-UI**
+
+### **Protocol SDKs & Core Libraries**
+```typescript
+// MCP Integration
+- @modelcontextprotocol/sdk (TypeScript)
+- modelcontextprotocol (Python)
+- MCP server implementations (community)
+
+// AG-UI Integration  
+- @ag-ui/core (TypeScript)
+- @ag-ui/react (React components)
+- ag-ui-python (Python SDK)
+- @ag-ui/middleware (Event processing)
+```
+
+### **Frontend Stack**
+```typescript
+// Core Framework
+- React 18+ with TypeScript
+- Next.js 14+ for SSR/SSG capabilities
+- Tailwind CSS for styling
+
+// AG-UI Specific
+- @ag-ui/react for agent components
+- Server-Sent Events (SSE) client
+- WebSocket fallback for AG-UI events
+- React Query for state management
+- Zustand for AG-UI event state
+
+// Real-time Features
+- EventSource API for SSE
+- React Suspense for streaming UI
+- Framer Motion for agent animations
+- React Hook Form for interactive inputs
+```
+
+### **Backend Stack**
+```python
+# Core Framework
+- FastAPI (Python) with async support
+- Uvicorn for ASGI server
+- Pydantic for data validation
+
+# MCP Integration
+- MCP Python SDK for server management
+- MCP community servers (pre-built)
+- Custom MCP server implementations
+
+# AG-UI Integration
+- AG-UI Python SDK for event streaming
+- Server-Sent Events (SSE) implementation
+- WebSocket support for fallback
+- Event queue management (Redis)
+
+# Database & Storage
+- PostgreSQL for primary database
+- Redis for caching and event queues
+- SQLAlchemy for ORM
+- Alembic for migrations
+```
+
+### **MCP Server Ecosystem**
+```yaml
+# Official MCP Servers (Anthropic)
+- filesystem: File operations
+- fetch: Web content retrieval
+- postgres: Database operations
+- puppeteer: Web automation
+
+# Community MCP Servers
+- salesforce-mcp: Salesforce integration
+- google-drive-mcp: Google Drive access
+- gmail-mcp: Email operations
+- calendar-mcp: Calendar management
+- github-mcp: GitHub integration
+- slack-mcp: Slack integration
+
+# Custom MCP Servers (To Build)
+- sap-sales-cloud-mcp: SAP Sales Cloud V2 integration
+- hubspot-mcp: HubSpot CRM integration
+- dynamics-mcp: Microsoft Dynamics
+- pipedrive-mcp: Pipedrive CRM
+- analytics-mcp: Business intelligence
+- sap-successfactors-mcp: SAP HR integration (future)
+- sap-s4hana-mcp: SAP ERP integration (future)
+```
+
+### **AI & ML Integration**
+```python
+# Core AI Services
+- Google Cloud Vertex AI (Gemini Pro)
+- LangChain for AI orchestration
+- MCP tool integration with LangChain
+
+# Vector & Search
+- ChromaDB or Pinecone for embeddings
+- OpenAI Embeddings via MCP
+- Semantic search across MCP resources
+
+# Audio Processing
+- OpenAI Whisper for speech-to-text
+- Audio processing via MCP audio servers
+- Real-time transcription streaming
+```
+
+### **Enhanced Data Models with MCP + AG-UI Integration**
+
+#### **AG-UI Event Interfaces**
+```typescript
+// Core AG-UI Event Structure
+interface AGUIEvent {
+  type: AGUIEventType;
+  data: any;
+  threadId: string;
+  runId?: string;
+  timestamp: string;
+  source: 'user' | 'agent' | 'system';
+}
+
+// Agent Execution State
+interface AgentState {
+  status: 'idle' | 'thinking' | 'tool_execution' | 'waiting_input' | 'complete';
+  currentStep: string;
+  progress: number;
+  tools: ToolExecution[];
+  context: any;
+}
+
+// Tool Execution via MCP
+interface ToolExecution {
+  toolName: string;
+  mcpServer: string;
+  parameters: any;
+  status: 'pending' | 'running' | 'complete' | 'error';
+  result?: any;
+  error?: string;
+  startTime: Date;
+  endTime?: Date;
+}
+```
+
+#### **MCP Resource Interfaces**
+```typescript
+// MCP Server Configuration
+interface MCPServerConfig {
+  name: string;
+  type: 'crm' | 'document' | 'calendar' | 'email' | 'database';
+  endpoint: string;
+  authentication: MCPAuthConfig;
+  capabilities: string[];
+  healthCheck: boolean;
+  maxConnections: number;
+}
+
+// CRM Entity from MCP
+interface CRMEntity {
+  id: string;
+  type: 'account' | 'contact' | 'opportunity' | 'lead';
+  mcpServer: string;
+  data: any;
+  lastSync: Date;
+  permissions: string[];
+}
+
+// Document Resource via MCP
+interface DocumentResource {
+  id: string;
+  name: string;
+  path: string;
+  mcpServer: string;
+  mimeType: string;
+  size: number;
+  permissions: string[];
+  content?: string;
+  metadata: any;
+}
+```
+
+#### **Enhanced Core Entities**
+```typescript
+interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  preferences: UserPreferences;
+  mcpConnections: MCPServerConfig[];
+  agUISettings: AGUIPreferences;
+}
+
+interface Note {
+  id: string;
+  userId: string;
+  content: string;
+  processedContent: string;
+  source: InputSource;
+  extractedData: ExtractedInformation;
+  summary: string;
+  mcpAssociations: MCPAssociation[];
+  agentExecutions: AgentExecution[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface AgentExecution {
+  id: string;
+  threadId: string;
+  runId: string;
+  agentType: string;
+  status: AgentState;
+  events: AGUIEvent[];
+  mcpToolCalls: ToolExecution[];
+  result?: any;
+  createdAt: Date;
+  completedAt?: Date;
+}
+```
+
+### **MCP + AG-UI Implementation Examples**
+
+#### **1. Real-time CRM Data Access**
+```python
+# Backend: MCP Integration
+from modelcontextprotocol import MCPClient
+from ag_ui import AGUIStream
+
+async def get_crm_contacts(query: str, stream: AGUIStream):
+    # Emit AG-UI event for tool start
+    await stream.emit({
+        "type": "TOOL_CALL_START",
+        "data": {"tool": "search_contacts", "server": "salesforce"}
+    })
+    
+    # Execute MCP tool call
+    mcp_client = MCPClient("salesforce")
+    contacts = await mcp_client.call_tool(
+        "search_contacts", 
+        {"query": query}
+    )
+    
+    # Stream results progressively
+    for contact in contacts:
+        await stream.emit({
+            "type": "STATE_DELTA",
+            "data": {"contacts": [contact]}
+        })
+    
+    # Signal completion
+    await stream.emit({
+        "type": "TOOL_CALL_END",
+        "data": {"result": f"Found {len(contacts)} contacts"}
+    })
+```
+
+#### **2. Interactive Agent Workflow**
+```typescript
+// Frontend: AG-UI React Integration
+import { useAGUI } from '@ag-ui/react';
+
+function AgentInterface() {
+  const { stream, state, sendMessage, cancel } = useAGUI({
+    endpoint: '/api/agent',
+    onEvent: (event) => {
+      console.log('Agent event:', event);
+    }
+  });
+
+  const handleNoteProcessing = async (noteContent: string) => {
+    await sendMessage({
+      type: 'process_note',
+      data: { content: noteContent }
+    });
+  };
+
+  return (
+    <div className="agent-interface">
+      {state.status === 'thinking' && (
+        <div className="thinking-indicator">
+          🤔 Agent is analyzing note content...
+        </div>
+      )}
+      
+      {state.status === 'tool_execution' && (
+        <div className="tool-execution">
+          🔧 Accessing {state.currentTool?.mcpServer}...
+          <button onClick={cancel}>Cancel</button>
+        </div>
+      )}
+      
+      {state.status === 'waiting_input' && (
+        <div className="user-input-request">
+          <p>Agent needs your input:</p>
+          <UserInputComponent onSubmit={sendMessage} />
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+#### **3. MCP Server Implementation Example**
+```python
+# Custom HubSpot MCP Server
+from modelcontextprotocol.server import MCPServer
+import hubspot
+
+class HubSpotMCPServer(MCPServer):
+    def __init__(self, api_key: str):
+        super().__init__("hubspot")
+        self.client = hubspot.Client.create(api_token=api_key)
+        
+    async def list_tools(self):
+        return [
+            {"name": "search_contacts", "description": "Search HubSpot contacts"},
+            {"name": "create_deal", "description": "Create new deal"},
+            {"name": "get_deal_pipeline", "description": "Get deal pipeline"}
+        ]
+    
+    async def call_tool(self, name: str, arguments: dict):
+        if name == "search_contacts":
+            return await self._search_contacts(arguments.get("query"))
+        elif name == "create_deal":
+            return await self._create_deal(arguments)
+        # ... other tools
+    
+    async def _search_contacts(self, query: str):
+        response = self.client.crm.contacts.search_api.do_search(
+            public_object_search_request={
+                "query": query,
+                "limit": 10
+            }
+        )
+        return [contact.to_dict() for contact in response.results]
+```
+
+### **Enhanced API Specifications with MCP + AG-UI**
+
+#### **AG-UI Agent Endpoints**
+```yaml
+# Agent Interaction API (AG-UI Compatible)
+POST /api/agent/execute
+  - Initiates agent execution with AG-UI event streaming
+  - Returns: SSE stream of AG-UI events
+  - Content-Type: text/event-stream
+
+POST /api/agent/message
+  - Send message to running agent
+  - Body: { threadId, type, data }
+  - Returns: ACK + continues SSE stream
+
+DELETE /api/agent/{threadId}
+  - Cancel running agent execution
+  - Returns: Cancellation acknowledgment
+
+GET /api/agent/{threadId}/status
+  - Get current agent execution status
+  - Returns: Current AgentState
+```
+
+#### **MCP Management API**
+```yaml
+# MCP Server Management
+GET /api/mcp/servers
+  - List all configured MCP servers
+  - Returns: MCPServerConfig[]
+
+POST /api/mcp/servers
+  - Add new MCP server connection
+  - Body: MCPServerConfig
+  - Returns: Server connection status
+
+PUT /api/mcp/servers/{serverId}
+  - Update MCP server configuration
+  - Returns: Updated configuration
+
+GET /api/mcp/servers/{serverId}/tools
+  - List available tools for MCP server
+  - Returns: Tool definitions
+
+POST /api/mcp/servers/{serverId}/tools/{toolName}
+  - Execute MCP tool directly (for testing)
+  - Body: Tool parameters
+  - Returns: Tool execution result
+```
+
+#### **Enhanced Core APIs**
+```yaml
+# Notes API with MCP Integration
+POST /api/notes
+  - Create note with automatic MCP entity linking
+  - Triggers AG-UI processing workflow
+  
+PUT /api/notes/{id}/process
+  - Trigger AI processing with AG-UI streaming
+  - Returns: SSE stream of processing events
+
+GET /api/notes/{id}/mcp-associations
+  - Get MCP resource associations for note
+  - Returns: Linked CRM entities, documents, etc.
+
+# Real-time Features
+GET /api/stream/notes/{noteId}
+  - Stream real-time updates for note processing
+  - Content-Type: text/event-stream
+  
+GET /api/stream/agent/{threadId}
+  - Stream AG-UI events for agent execution
+  - Content-Type: text/event-stream
+```
+
+### **Development Guidelines for MCP + AG-UI**
+
+#### **MCP Server Development**
+```python
+# MCP Server Template
+from modelcontextprotocol.server import MCPServer
+from modelcontextprotocol.types import Tool, Resource
+
+class CustomMCPServer(MCPServer):
+    def __init__(self, name: str):
+        super().__init__(name)
+        
+    async def list_tools(self) -> List[Tool]:
+        """Define available tools"""
+        return [
+            Tool(
+                name="example_tool",
+                description="Example tool description",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "param1": {"type": "string"},
+                        "param2": {"type": "number"}
+                    }
+                }
+            )
+        ]
+    
+    async def call_tool(self, name: str, arguments: dict):
+        """Execute tool with error handling"""
+        try:
+            if name == "example_tool":
+                return await self._example_tool_logic(arguments)
+        except Exception as e:
+            return {"error": str(e)}
+    
+    async def list_resources(self) -> List[Resource]:
+        """Define available resources"""
+        return []  # Implement resource listing
+```
+
+#### **AG-UI Agent Development**
+```python
+# AG-UI Agent Template
+from ag_ui import AGUIStream, AGUIEvent
+from typing import AsyncGenerator
+
+class AIAgent:
+    def __init__(self, mcp_manager: MCPManager):
+        self.mcp = mcp_manager
+        
+    async def execute(
+        self, 
+        task: str, 
+        stream: AGUIStream
+    ) -> AsyncGenerator[AGUIEvent, None]:
+        
+        # Start execution
+        await stream.emit({
+            "type": "LIFECYCLE_START",
+            "data": {"task": task}
+        })
+        
+        try:
+            # Show thinking process
+            await stream.emit({
+                "type": "TEXT_MESSAGE_CONTENT",
+                "data": {"text": "Analyzing your request..."}
+            })
+            
+            # Execute MCP tool
+            await stream.emit({
+                "type": "TOOL_CALL_START", 
+                "data": {"tool": "search_crm", "server": "salesforce"}
+            })
+            
+            result = await self.mcp.call_tool(
+                "salesforce", "search_contacts", {"query": task}
+            )
+            
+            await stream.emit({
+                "type": "TOOL_CALL_END",
+                "data": {"result": result}
+            })
+            
+            # Request user input if needed
+            if self._needs_user_input(result):
+                await stream.emit({
+                    "type": "USER_INPUT_REQUEST",
+                    "data": {"question": "Which contact would you like to focus on?"}
+                })
+                
+                # Wait for user response
+                user_input = await stream.wait_for_input()
+                
+            # Complete execution
+            await stream.emit({
+                "type": "LIFECYCLE_END",
+                "data": {"result": "Task completed successfully"}
+            })
+            
+        except Exception as e:
+            await stream.emit({
+                "type": "ERROR",
+                "data": {"error": str(e)}
+            })
+```
+
+#### **React Component Guidelines**
+```typescript
+// AG-UI React Best Practices
+import { useAGUI, AGUIEventHandler } from '@ag-ui/react';
+
+function SmartNoteProcessor() {
+  const { stream, state, events } = useAGUI({
+    endpoint: '/api/agent/process-note',
+    autoReconnect: true,
+    bufferEvents: true
+  });
+
+  const handleEventStream: AGUIEventHandler = (event) => {
+    switch (event.type) {
+      case 'TOOL_CALL_START':
+        // Show tool execution UI
+        break;
+      case 'USER_INPUT_REQUEST':
+        // Show input form
+        break;
+      case 'STATE_DELTA':
+        // Update application state
+        break;
+      case 'ERROR':
+        // Handle errors gracefully
+        break;
+    }
+  };
+
+  return (
+    <div className="note-processor">
+      <AGUIEventRenderer 
+        events={events}
+        onUserInput={handleUserInput}
+        onCancel={() => stream.cancel()}
+      />
+    </div>
+  );
+}
+```
+
+---
+
+## 📊 **Implementation Priority Matrix with MCP + AG-UI**
+
+### **Phase 1 - Foundation (Must Have for MVP)**
+1. **MCP + AG-UI Setup** (Phase 1.2-1.3) - ⭐⭐⭐
+2. **Basic AI Agent with AG-UI** (Phase 2.1) - ⭐⭐⭐
+3. **Core MCP Servers** (Phase 2.2) - ⭐⭐⭐⭐
+4. **Interactive Note Processing** (Phase 3.1) - ⭐⭐⭐
+
+### **Phase 2 - Core CRM Features (Essential)**
+1. **Salesforce MCP Integration** (Phase 4.2) - ⭐⭐⭐⭐
+2. **SAP Sales Cloud MCP Integration** (Phase 4.2) - ⭐⭐⭐⭐
+3. **Streaming Email Generation** (Phase 5.1) - ⭐⭐⭐
+4. **Human-in-the-Loop Workflows** (Phase 5.4) - ⭐⭐⭐⭐
+
+### **Phase 3 - Advanced Features (Nice to Have)**
+1. **Multi-CRM MCP Support** (HubSpot, Dynamics, Pipedrive) - ⭐⭐⭐⭐
+2. **Document MCP Servers** (Phase 6.2) - ⭐⭐⭐
+3. **Calendar Integration via MCP** (Phase 6.1) - ⭐⭐⭐
+4. **Advanced Analytics** (Phase 6.3) - ⭐⭐⭐⭐
+
+### **Phase 4 - Enterprise Features (Future)**
+1. **Enterprise Security & Compliance** (Phase 7) - ⭐⭐⭐⭐
+2. **SAP Ecosystem Expansion** (SuccessFactors, S/4HANA) - ⭐⭐⭐⭐
+3. **Advanced MCP Orchestration** (Phase 4.4) - ⭐⭐⭐⭐
+4. **Mobile AG-UI Interface** - ⭐⭐⭐
+
+---
+
+## 🚀 **Next Steps for MCP + AG-UI Development**
+
+### **Week 1-2: Protocol Foundation**
+```bash
+# 1. Set up development environment
+npm create next-app@latest ai-sales-assistant --typescript
+cd ai-sales-assistant
+npm install @ag-ui/react @ag-ui/core
+
+# 2. Install MCP SDK
+pip install modelcontextprotocol
+npm install @modelcontextprotocol/sdk
+
+# 3. Create basic project structure
+mkdir -p {src/components/agent,src/mcp,src/ag-ui}
+mkdir -p {backend/mcp_servers,backend/agents,backend/ag_ui}
+```
+
+### **Week 3-4: First AG-UI Agent**
+```python
+# 4. Create basic AG-UI agent
+# backend/agents/note_processor.py
+from ag_ui import AGUIStream
+from modelcontextprotocol import MCPClient
+
+class NoteProcessorAgent:
+    async def process_note(self, content: str, stream: AGUIStream):
+        await stream.emit({
+            "type": "LIFECYCLE_START",
+            "data": {"task": "Processing note"}
+        })
+        # Implementation here...
+```
+
+### **Week 5-6: SAP Sales Cloud MCP Server**
+```python
+# 5. Implement SAP Sales Cloud MCP server
+# backend/mcp_servers/sap_sales_cloud_server.py
+from modelcontextprotocol.server import MCPServer
+import requests
+import base64
+
+class SAPSalesCloudMCPServer(MCPServer):
+    def __init__(self, tenant_url: str, username: str, password: str):
+        super().__init__("sap_sales_cloud")
+        self.base_url = f"https://{tenant_url}/api/v2"
+        self.auth_header = self._create_auth_header(username, password)
+    
+    # Implementation following detailed example above
+```
+
+### **Week 7-8: Multi-CRM AG-UI Integration**
+```typescript
+// 6. Create unified CRM interface with AG-UI
+// src/components/crm/UnifiedCRMInterface.tsx
+import { useAGUI } from '@ag-ui/react';
+
+export function UnifiedCRMInterface() {
+    const { stream } = useAGUI({ endpoint: '/api/agent/multi-crm' });
+    
+    const handleCRMOperation = async (operation: string, crmSystem: string, data: any) => {
+        await stream.emit({
+            type: 'USER_INPUT',
+            data: { operation, crmSystem, data }
+        });
+    };
+    
+    // Implementation with SAP, Salesforce, HubSpot support
+}
+```
+
+### **SAP Sales Cloud Setup Requirements**
+
+#### **SAP Prerequisites**
+```bash
+# 1. SAP Sales Cloud V2 tenant access
+# 2. Dedicated API user creation in SAP
+# 3. Business role assignment for API operations
+# 4. SAP Business Accelerator Hub API access
+```
+
+#### **SAP Authentication Setup**
+```env
+# Environment variables for SAP integration
+SAP_TENANT_URL=your-tenant.crm.cloud.sap
+SAP_API_USERNAME=api_user@company.com
+SAP_API_PASSWORD=secure_password
+SAP_AUTH_TYPE=basic  # or 'certificate'
+SAP_CLIENT_CERT_PATH=/path/to/certificate.pem
+SAP_CLIENT_KEY_PATH=/path/to/private.key
+```
+
+#### **SAP API Discovery**
+1. **Access SAP Business Accelerator Hub**: Visit api.sap.com to explore available APIs
+2. **Download API Specifications**: Get EDMX/OpenAPI specs for your use cases
+3. **Review API Limits**: Check rate limiting and pagination requirements
+4. **Test API Endpoints**: Use SAP's API testing tools before implementation
+
+### **Recommended Development Sequence**
+
+#### **Sprint 1 (Weeks 1-2): Foundation**
+- [ ] Set up MCP + AG-UI development environment
+- [ ] Create basic project structure
+- [ ] Implement "Hello World" AG-UI agent
+- [ ] Set up basic MCP server infrastructure
+
+#### **Sprint 2 (Weeks 3-4): First Integration**
+- [ ] Build simple note processing AG-UI agent
+- [ ] Create file system MCP server
+- [ ] Implement basic frontend with AG-UI components
+- [ ] Add real-time streaming between components
+
+#### **Sprint 3 (Weeks 5-6): CRM Integration**
+- [ ] Implement Salesforce MCP server
+- [ ] **Implement SAP Sales Cloud V2 MCP server**
+- [ ] Add contact/opportunity search and retrieval across CRMs
+- [ ] Create interactive CRM data display with unified view
+- [ ] Add human-in-the-loop approval workflows for CRM operations
+
+#### **Sprint 4 (Weeks 7-8): Advanced CRM Features**
+- [ ] Add email generation with multi-CRM data integration
+- [ ] Implement cross-CRM opportunity management
+- [ ] Create unified contact and account views
+- [ ] Add collaborative CRM data editing features
+- [ ] **Build SAP-specific business logic and validation rules**
+
+#### **Sprint 5 (Weeks 9-10): SAP Enterprise Integration**
+- [ ] **Add SAP Sales Cloud advanced features (territory management, forecasting)**
+- [ ] Implement SAP-specific authentication and security
+- [ ] Create SAP business process automation workflows
+- [ ] Add SAP reporting and analytics integration
+- [ ] Build SAP data validation and approval processes
+
+### **Development Tools & Resources**
+
+#### **Essential Documentation**
+- [MCP Specification](https://modelcontextprotocol.io/specification)
+- [AG-UI Documentation](https://docs.ag-ui.com)
+- [MCP Server Examples](https://github.com/modelcontextprotocol/servers)
+- [AG-UI React Components](https://docs.ag-ui.com/frameworks/react)
+
+#### **Community Resources**
+- [MCP Community Servers](https://github.com/modelcontextprotocol/servers)
+- [AG-UI Protocol Working Group](https://lu.ma/8supz1j0)
+- [CopilotKit Discord](https://discord.gg/6dffbvGU3D) (AG-UI creators)
+
+#### **Testing & Debugging**
+```bash
+# MCP Server Testing
+mcp-inspector http://localhost:3001/mcp
+
+# AG-UI Event Debugging
+curl -N http://localhost:3000/api/agent/execute \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"task": "test"}' \
+  | jq .
+```
+
+This enhanced roadmap leverages both MCP for standardized backend integrations and AG-UI for rich frontend agent interactions, creating a modern, interoperable AI sales assistant that follows industry standards and can grow with the ecosystem.
