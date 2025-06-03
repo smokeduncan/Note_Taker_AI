@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRM Note-Taking Application - Data Explorer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark" style="background-color: var(--primary-color);">
+        <div class="container">
+            <a class="navbar-brand" href="index.html">CRM Note-Taking App</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="dashboard.html">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="index.html">BRD Document</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="data-explorer.html">Data Explorer</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="demo.html">Interactive Demo</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <header class="hero-section">
+        <div class="container text-center">
+            <h1 class="display-4">CRM Note-Taking Application</h1>
+            <p class="lead">Data Explorer</p>
+            <p>Explore the seed data for accounts, prospects, and activities</p>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="container mt-5">
+        <div class="row">
+            <!-- Data Explorer Controls -->
+            <div class="col-12 mb-4">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-group mb-3">
+                                    <label for="dataType" class="form-label">Data Type</label>
+                                    <select class="form-select" id="dataType">
+                                        <option value="accounts">Accounts</option>
+                                        <option value="prospects">Prospects</option>
+                                        <option value="activities">Activities</option>
+                                        <option value="notes">Notes</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group mb-3">
+                                    <label for="filterField" class="form-label">Filter By</label>
+                                    <select class="form-select" id="filterField">
+                                        <option value="all">All Records</option>
+                                        <!-- Dynamic options will be populated based on data type -->
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group mb-3">
+                                    <label for="searchInput" class="form-label">Search</label>
+                                    <input type="text" class="form-control" id="searchInput" placeholder="Search...">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Data Display -->
+            <div class="col-12 mb-4">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0" id="dataTitle">Accounts</h5>
+                        <span class="badge bg-primary" id="recordCount">50 records</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover" id="dataTable">
+                                <thead>
+                                    <tr id="tableHeader">
+                                        <!-- Headers will be dynamically populated -->
+                                    </tr>
+                                </thead>
+                                <tbody id="tableBody">
+                                    <!-- Data will be dynamically populated -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mt-3">
+                            <div>
+                                <select class="form-select form-select-sm" id="pageSize">
+                                    <option value="10">10 per page</option>
+                                    <option value="25">25 per page</option>
+                                    <option value="50">50 per page</option>
+                                    <option value="100">100 per page</option>
+                                </select>
+                            </div>
+                            <nav aria-label="Page navigation">
+                                <ul class="pagination" id="pagination">
+                                    <!-- Pagination will be dynamically populated -->
+                                </ul>
+                            </nav>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Detail View -->
+            <div class="col-12 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Record Details</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="detailView">
+                            <p class="text-center text-muted">Select a record to view details</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Related Records -->
+            <div class="col-12 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Related Records</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="relatedRecords">
+                            <p class="text-center text-muted">Select a record to view related data</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>CRM Note-Taking Application</h5>
+                    <p>Business Requirements Document</p>
+                    <p>Version 1.0 | April 14, 2025</p>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <p>Integrated with SAP CRM</p>
+                    <p>Powered by Gemini Pro 2.5</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Sample data (would be loaded from JSON files in production)
+        const sampleData = {
+            accounts: [
+                {
+                    account_id: "ACC0001",
+                    company_name: "Tech Solutions",
+                    industry: "Technology",
+                    company_type: "Corporation",
+                    annual_revenue: 5000000,
+                    employee_count: 250,
+                    status: "Active",
+                    account_owner: "Alex Johnson"
+                },
+                {
+                    account_id: "ACC0002",
+                    company_name: "Healthcare Innovations",
+                    industry: "Healthcare",
+                    company_type: "LLC",
+                    annual_revenue: 3500000,
+                    employee_count: 120,
+                    status: "Active",
+                    account_owner: "Sam Williams"
+                },
+                {
+                    account_id: "ACC0003",
+                    company_name: "Financial Partners",
+                    industry: "Finance",
+                    company_type: "Partnership",
+                    annual_revenue: 8000000,
+                    employee_count: 180,
+                    status: "Active",
+                    account_owner: "Taylor Smith"
+                },
+                {
+                    account_id: "ACC0004",
+                    company_name: "Manufacturing Pro",
+                    industry: "Manufacturing",
+                    company_type: "Corporation",
+                    annual_revenue: 12000000,
+                    employee_count: 450,
+                    status: "Active",
+                    account_owner: "Jordan Brown"
+                },
+                {
+                    account_id: "ACC0005",
+                    company_name: "Retail Concepts",
+                    industry: "Retail",
+                    company_type: "LLC",
+                    annual_revenue: 2500000,
+                    employee_count: 85,
+                    status: "Inactive",
+                    account_owner: "Casey Davis"
+                }
+            ],
+            prospects: [
+                {
+                    prospect_id: "PROS0001",
+                    account_id: "ACC0001",
+                    first_name: "John",
+                    last_name: "Smith",
+                    title: "CTO",
+                    status: "Opportunity",
+                    estimated_value: 75000,
+                    probability: 40,
+                    assigned_to: "Sam Williams"
+                },
+                {
+                    prospect_id: "PROS0002",
+                    account_id: "ACC0001",
+                    first_name: "Sarah",
+                    last_name: "Johnson",
+                    title: "CEO",
+                    status: "Qualified Lead",
+                    estimated_value: 50000,
+                    probability: 25,
+                    assigned_to: "Alex Johnson"
+                },
+                {
+                    prospect_id: "PROS0003",
+                    account_id: "ACC0002",
+                    first_name: "Michael",
+                    last_name: "Brown",
+                    title: "Director of IT",
+                    status: "Proposal",
+                    estimated_value: 120000,
+                    probability: 60,
+                    assigned_to: "Taylor Smith"
+                },
+                {
+                    prospect_id: "PROS0004",
+                    account_id: "ACC0003",
+                    first_name: "Jennifer",
+                    last_name: "Davis",
+                    title: "CFO",
+                    status: "Negotiation",
+                    estimated_value: 200000,
+                    probability: 80,
+                    assigned_to: "Jordan Brown"
+                },
+                {
+                    prospect_id: "PROS0005",
+                    account_id: "ACC0004",
+                    first_name: "Robert",
+                    last_name: "Wilson",
+                    title: "COO",
+                    status: "Closed Won",
+                    estimated_value: 150000,
+                    probability: 100,
+                    assigned_to: "Casey Davis"
+                }
+            ],
+            activities: [
+                {
+                    activity_id: "ACT0001",
+                    prospect_id: "PROS0001",
+                    account_id: "ACC0001",
+                    type: "Call",
+                    description: "Discovery call with John to understand their needs.",
+                    date: "2025-04-05",
+                    status: "Completed",
+                    outcome: "Positive"
+                },
+                {
+                    activity_id: "ACT0002",
+                    prospect_id: "PROS0001",
+                    account_id: "ACC0001",
+                    type: "Email",
+                    description: "Sent follow-up email to John regarding their interest in our products.",
+                    date: "2025-04-07",
+                    status: "Completed",
+                    outcome: "Neutral"
+                },
+                {
+                    activity_id: "ACT0003",
+                    prospect_id: "PROS0002",
+                    account_id: "ACC0001",
+                    type: "Meeting",
+                    description: "Initial meeting with Sarah and team to present our solutions.",
+                    date: "2025-04-10",
+                    status: "Scheduled",
+                    outcome: null
+                },
+                {
+                    activity_id: "ACT0004",
+                    prospect_id: "PROS0003",
+                    account_id: "ACC0002",
+                    type: "Demo",
+                    description: "Product demonstration for Michael and team.",
+                    date: "2025-04-03",
+                    status: "Completed",
+                    outcome: "Positive"
+                },
+                {
+                    activity_id: "ACT0005",
+                    prospect_id: "PROS0004",
+                    account_id: "ACC0003",
+                    type: "Proposal",
+                    description: "Sent initial proposal to Jennifer for review.",
+                    date: "2025-04-08",
+                    status: "Completed",
+                    outcome: "Requires Follow-up"
+                }
+            ],
+            notes: [
+                {
+                    note_id: "NOTE0001",
+                    account_id: "ACC0001",
+                    date: "2025-04-05",
+                    author: "Sam Williams",
+                    content: "Had a call with John Smith about their integration needs. They expressed interest in our API solution. Follow up in 7 days.",
+                    related_contact: "CON0001"
+                },
+                {
+                    note_id: "NOTE0002",
+                    account_id: "ACC0001",
+                    date: "2025-03-20",
+                    author: "Alex Johnson",
+                    content: "Met with Sarah Johnson to discuss pricing. They have concerns about implementation timeline but are open to a proposal.",
+                    related_contact: "CON0002"
+                },
+                {
+                    note_id: "NOTE0003",
+                    account_id: "ACC0002",
+                    date: "2025-04-03",
+                    author: "Taylor Smith",
+                    content: "Michael requested information about technical specifications. Sent over materials and scheduled a follow-up for next Wednesday.",
+                    related_contact: "CON0003"
+                },
+                {
+                    note_id: "NOTE0004",
+                    account_id: "ACC0003",
+                    date: "2025-04-08",
+                    author: "Jordan Brown",
+                    content: "Quarterly review with Jennifer. Account is performing well. Key issues: integration with legacy systems. Next ste
+(Content truncated due to size limit. Use line ranges to read in chunks)
